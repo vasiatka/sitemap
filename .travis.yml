@@ -6,3 +6,4 @@ php:
   - '7.0'
   - hhvm
   - nightly
+script: php sitemap/tests/runtests.php
