@@ -35,6 +35,7 @@ class SitemapBaseTest extends UnitTestCase
  
   function testInitAndSetters()
   {
+    $this->assertTrue(false);
     $map = $this->createSitemap();
 
     $this->assertEqual($map->getSize(), 0);
