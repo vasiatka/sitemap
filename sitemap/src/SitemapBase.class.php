@@ -1,25 +1,29 @@
 <?php
-require_once(dirname(__FILE__)."/SitemapLog.class.php");
-
 abstract class SitemapBase
 {
   const MAX_SITEMAP_SIZE = 10485760;//10*1024*1024
   const MAX_URL_COUNT = 50000;
   const MAX_URL_LEN = 2048;
+  protected $valid_changefreq =  array('always','hourly','daily','weekly','monthly','yearly','never');
 
   protected $is_started;
   protected $tmp_file;
+  protected $tmp_file_ptr;
   protected $config;
   
   protected $size = 0;
   protected $urls_count = 0;
   protected $name = 'sitemap.xml';
-  protected $path;
 
+  protected $path;
   protected $protocol;
   protected $host;
 
-  protected $logger; 
+  protected $logger;
+
+  protected $root_tag;
+  protected $item_tag;
+  protected $optional_item_parts;
 
   function __construct($config = array())
   {
@@ -69,12 +73,17 @@ abstract class SitemapBase
   {
     $this->is_started = true;
     $this->logger->message('Start tmp_ file "'.$this->getTmpFilePath().'"');
-    $this->addHeader();
+    if(!$this->tmp_file_ptr = fopen($this->getTmpFilePath(),'w'))
+      $this->logger->error('tmp_file "'.$this->getTmpFilePath().'" is not writable');
+
+    $this->addData($this->getXmlHeader());
+    $this->addData($this->getOpenRootTag());
   }
   
   function commit()
   {
-    $this->addFooter();
+    $this->addData($this->getClosingRootTag());
+    fclose($this->tmp_file_ptr);
     $result = $this->moveTmpFile();
 
     if(isset($this->config['gzip']) && $this->config['gzip'])
@@ -133,28 +142,28 @@ abstract class SitemapBase
     return $this->tmp_file;
   }
   
-  abstract function getHeader();
-  abstract function getFooter();
-  
-  function addHeader()
+  function getXmlHeader()
   {
-    $this->addData($this->getHeader());
+    return '<?xml version="1.0" encoding="UTF-8"?>'.PHP_EOL;
+  }
+
+  function getOpenRootTag()
+  {
+    return "<{$this->root_tag} xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">";
   }
   
-  function addFooter()
+  function getClosingRootTag()
   {
-    $this->addData($this->getFooter());
+    return "</{$this->root_tag}>";
   }
-  
+
   function addData($data)
   {
     if(!$this->is_started)
       $this->logger->error('Writing data before starting');
-    $this->size+=file_put_contents($this->getTmpFilePath(),$data,FILE_APPEND);
+    $this->size+=fwrite($this->tmp_file_ptr,$data);
   }
 
-  abstract function addUrl($url,$lastmod,$priority=0.8,$changefreq = 'weekly');
- 
   function setName($name)
   {
     $this->name = $name;  
@@ -191,7 +200,7 @@ abstract class SitemapBase
     return $this->getPath().'/'.$this->getName();
   }
   
-  function getUrl()
+  function getSitemapUrl()
   {
     $url = rtrim($this->config['base_url'],'/')."/".$this->getName();  
     return $url;
@@ -212,37 +221,81 @@ abstract class SitemapBase
   function isAllowedAddingString($item)
   {
     $string_size = strlen($item); //strlen returns length of string in bytes
-    $total_size = $this->getSize() + $string_size + strlen($this->getFooter());
+    $total_size = $this->getSize() + $string_size + strlen($this->getClosingRootTag());
     if($total_size>self::MAX_SITEMAP_SIZE)
       return false;
     return true;
   }
 
-  function checkPriority($priority)
+  function addUrl($url)
   {
-    if( ($priority>=0.0) && ($priority<=1) )
-      return true;
-    return false;
-  }
 
-  function checkChangefreq($changefreq)
-  {
-    if(in_array($changefreq,array('always','hourly','daily','weekly','monthly','yearly','never')))
-      return true;
-    return false;
-  }
+    if(!$this->isAllowedAddingUrls())
+      return false;
 
-  function checkUrl($url)
-  {
-    if(strlen($url)>self::MAX_URL_LEN)
+    $item = $this->addRequiredParts($url);
+    $item .= $this->addOptionalParts($url);
+    $item  = $this->wrap($item,$this->item_tag);
+
+    if(!$this->isAllowedAddingString($item))
       return false;
-    $base = @parse_url($url);
-    if(!isset($base['scheme']) || ($base['scheme']!=$this->protocol))
-      return false;
-    if(!isset($base['host']) || ($base['host']!=$this->host))
-    { 
-      return false;
-    }
+    $this->addData($item);
+    $this->urls_count++;
     return true;
   }
+
+  function addRequiredParts($item)
+  {  
+    if(!isset($item['loc']))
+      $this->logger->error("Url is required");
+    
+    $url = $item['loc'];
+
+    if(strlen($url)>self::MAX_URL_LEN)
+      $this->logger->warning("Url is too long: $url");
+    
+    $base = @parse_url($url);
+    
+    if(!isset($base['scheme']) || ($base['scheme']!=$this->protocol))
+      $this->logger->warning("Url has no protocol: $url");
+    
+    if(!isset($base['host']) || ($base['host']!=$this->host))
+      $this->logger->warning("Url has no host: $url");
+
+    return $this->wrap($url,'loc');
+  }
+
+  function addOptionalParts($item)
+  {
+    $parts = '';
+    if(isset($item['lastmod']) && in_array('lastmod',$this->optional_item_parts))
+    {
+      $lastmod = $item['lastmod'];
+      if( !is_integer($lastmod)  )
+        $this->logger->warning("Lastmod is not valid timestamp: $lastmod");
+      
+      $parts .= $this->wrap(date(DATE_RFC3339,$lastmod),'lastmod');
+    }
+    
+    if(isset($item['priority']) && in_array('priority',$this->optional_item_parts))
+    {
+      $priority = $item['priority'];
+      if( (0.0 > $priority) || ($priority > 1) )
+        $this->logger->warning("Bad priority value: $priority");
+      
+      $parts .= $this->wrap($priority,'priority');
+    }
+    
+    if(isset($item['changefreq']) && in_array('changefreq',$this->optional_item_parts))
+    {
+      $changefreq = $item['changefreq'];
+      if(!in_array($changefreq,$this->valid_changefreq))
+        $this->logger->warning("Bad changefreq value: $changefreq");
+      
+      $parts .= $this->wrap($changefreq,'changefreq');
+    }
+
+    return $parts;
+  }
+
 }

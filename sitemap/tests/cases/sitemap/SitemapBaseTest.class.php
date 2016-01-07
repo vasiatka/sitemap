@@ -1,17 +1,9 @@
 <?php
 class SitemapBaseChild extends SitemapBase
 {
+  protected $root_tag = 'h';
 
-  function getHeader()
-  {
-    return "<h>";
-  }
-  function getFooter()
-  {
-    return "</h>";
-  }
-
-  function addUrl($url,$lastmod,$priority=0.8,$changefreq = 'weekly')
+  function addUrl($url)
   {
 
   }
@@ -91,7 +83,7 @@ class SitemapBaseTest extends UnitTestCase
     $map->start();
     $map->commit();
     $content = file_get_contents($map->getSitemapPath());
-    $this->assertEqual($content, "<h></h>");
+    $this->assertEqual($content, '<?xml version="1.0" encoding="UTF-8"?>'.PHP_EOL."<h xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\"></h>");
   }
 
   function testGzipFileCreation()

@@ -20,7 +20,7 @@ class SitemapIndexTest extends UnitTestCase
     $date = date(DATE_RFC3339,$lastmod);
 
     $map->start();
-    $map->addUrl($url,$lastmod);
+    $map->addUrl(array('loc'=>$url,'lastmod'=>$lastmod));
     $map->commit();
     $this->assertEqual($map->getUrlsCount(), 1);
     $content = file_get_contents($map->getSitemapPath());

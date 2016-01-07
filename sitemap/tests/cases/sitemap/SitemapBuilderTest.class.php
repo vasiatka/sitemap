@@ -20,14 +20,15 @@ class SitemapBuilderTest extends UnitTestCase
     $date = date(DATE_RFC3339,$lastmod);
     $priority = 1;
     $changefreq = 'weekly';
+    $item = array('loc'=>$url,'lastmod'=>$lastmod,'priority'=>$priority,'changefreq'=>$changefreq);
 
     $builder->start();
-    $builder->addUrl($url,$lastmod,$priority,$changefreq);
+    $builder->addUrl($item);
     $builder->commit();
     $content = file_get_contents(VAR_DIR."/sitemap.xml");
     $sample = <<<EOD
 <?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>$url</loc><lastmod>$date</lastmod><changefreq>weekly</changefreq><priority>1</priority></url></urlset>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>$url</loc><lastmod>$date</lastmod><priority>1</priority><changefreq>weekly</changefreq></url></urlset>
 EOD;
     $this->assertEqual($content, $sample);
   }
@@ -49,11 +50,11 @@ EOD;
   {
     $time = time();
     $date = date(DATE_RFC3339,$time);
-    $builder = $this->createBuilder(array('sitemapindex_creation_time'=>$time));
+    $builder = $this->createBuilder();
     $sample_url = "http://sample.org/";
     $builder->start();
     for($i=0;$i<100001; $i++)
-      $builder->addUrl($sample_url.$i,$time,0.8,'weekly');
+      $builder->addUrl(array('loc'=>$sample_url.$i,'lastmod'=>$time,'priority'=>0.8,'changefreq'=>'weekly'));
     $builder->commit();
     $path = VAR_DIR."/sitemap.xml";
     $path0 = VAR_DIR."/sitemap0.xml";
@@ -68,18 +69,19 @@ EOD;
     $url0 = 'http://sample.org/sitemap0.xml';
     $url1 = 'http://sample.org/sitemap1.xml';
     $url2 = 'http://sample.org/sitemap2.xml';
-    
+   
+    $creation_time = date(DATE_RFC3339,$builder->getCreationTime());
     $content = file_get_contents($path);
     $sample = <<<EOD
 <?xml version="1.0" encoding="UTF-8"?>
-<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><sitemap><loc>$url0</loc><lastmod>$date</lastmod></sitemap><sitemap><loc>$url1</loc><lastmod>$date</lastmod></sitemap><sitemap><loc>$url2</loc><lastmod>$date</lastmod></sitemap></sitemapindex>
+<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><sitemap><loc>$url0</loc><lastmod>$creation_time</lastmod></sitemap><sitemap><loc>$url1</loc><lastmod>$creation_time</lastmod></sitemap><sitemap><loc>$url2</loc><lastmod>$creation_time</lastmod></sitemap></sitemapindex>
 EOD;
     $this->assertEqual($content, $sample);
   
     $content = file_get_contents($path2);
     $sample = <<<EOD
 <?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>http://sample.org/100000</loc><lastmod>$date</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url></urlset>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>http://sample.org/100000</loc><lastmod>$date</lastmod><priority>0.8</priority><changefreq>weekly</changefreq></url></urlset>
 EOD;
     $this->assertEqual($content, $sample);
   }
@@ -92,7 +94,7 @@ EOD;
     $sample_url = "http://sample.org/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/big/";
     $builder->start();
     for($i=0;$i<20000; $i++)
-      $builder->addUrl($sample_url.$i,$time,0.8,'weekly');
+      $builder->addUrl(array('loc'=>$sample_url.$i,'lastmod'=>$time,'priority'=>0.8,'changefreq'=>'weekly'));
     $builder->commit();
     $path0 = VAR_DIR."/sitemap0.xml";
     $path1 = VAR_DIR."/sitemap1.xml";
@@ -104,11 +106,9 @@ EOD;
   }
  
 
-  function createBuilder($custom_config = array())
+  function createBuilder()
   {
     $config = array('path' => VAR_DIR, 'tmp_dir'=>VAR_DIR,'base_url'=>'http://sample.org/');
-    foreach($custom_config as $key => $value)
-      $config[$key] = $value;
     $map = new SitemapBuilder($config);
     return $map;
   }

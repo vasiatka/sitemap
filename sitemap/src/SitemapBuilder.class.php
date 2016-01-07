@@ -1,6 +1,4 @@
 <?php
-require_once(dirname(__FILE__).'/Sitemap.class.php');
-require_once(dirname(__FILE__).'/SitemapIndex.class.php');
 
 class SitemapBuilder
 {
@@ -8,18 +6,25 @@ class SitemapBuilder
   protected $sitemaps = array();
   protected $current;
   protected $is_started;
-  
+  protected $creation_time;
+
   function __construct($config)
   {
-    $this->config = $config;
-    $this->is_started = false;
-    $this->current = -1;
+    $this->reset($config);
   }
   
   function start()
   {
     $this->createAndStartSitemap();
     $this->is_started = true;
+    $this->creation_time=time();
+  }
+  
+  function createAndStartSitemap()
+  {
+    $this->current++;
+    $this->sitemaps[$this->current] = new Sitemap($this->config);
+    $this->sitemaps[$this->current]->start();
   }
   
   function commit()
@@ -41,41 +46,47 @@ class SitemapBuilder
     {
       $this->sitemaps[$i]->setName($this->getName($i));
       $result = $this->sitemaps[$i]->commit() && $result;
-      $index->addSitemap($this->sitemaps[$i]);
+      $index->addSitemap($this->sitemaps[$i],$this->creation_time);
     }
 
     return $index->commit() && $result; 
-
   }
 
+  function addUrl($item)
+  {
+    if(!$this->is_started)
+      $this->start();
+
+    if(!$this->sitemaps[$this->current]->addUrl($item))//try add url
+    {
+      $this->createAndStartSitemap();
+      $this->addUrl($item);
+    }
+  }
+
+  function getCreationTime()
+  {
+    return $this->creation_time;
+  }
+
+  function join($items)
+  {
+    foreach($items as $item)
+      $this->addUrl ($item);
+  }
+  
   function getName($n)
   {
     return "sitemap$n.xml";
   }
   
-  function addUrl($url,$lastmod,$priority=0.8,$changefreq = 'weekly')
+  function reset($config)
   {
-    if(!$this->is_started)
-      $this->start();
-    
-    if(!$this->sitemaps[$this->current]->addUrl($url, $lastmod, $priority, $changefreq))//try add url
-    {
-      $this->createAndStartSitemap();
-      $this->addUrl($url, $lastmod, $priority, $changefreq);
-    }
-  }
-  
-  function createAndStartSitemap()
-  {
-    $this->current++;
-    $this->sitemaps[$this->current] = new Sitemap($this->config);
-    $this->sitemaps[$this->current]->start();
-  }
-  
-  function join($items)
-  {
-    foreach($items as $item)
-      $this->addUrl ($item['url'], $item['lastmod'], $item['priority'], $item['changefreq']);
+    $this->config = $config;
+    $this->is_started = false;
+    $this->current = -1;
+    $this->sitemaps = array();
+    $this->creation_time = null;
   }
   
   static function buildSitemap($config,$items)

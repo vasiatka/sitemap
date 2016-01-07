@@ -22,13 +22,13 @@ class SitemapTest extends UnitTestCase
     $changefreq = 'weekly';
 
     $map->start();
-    $map->addUrl($url,$lastmod,$priority,$changefreq);
+    $map->addUrl(array('loc'=>$url,'lastmod' => $lastmod,'priority'=>$priority,'changefreq'=>$changefreq));
     $map->commit();
     $this->assertEqual($map->getUrlsCount(), 1);
     $content = file_get_contents($map->getSitemapPath());
     $sample = <<<EOD
 <?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>$url</loc><lastmod>$date</lastmod><changefreq>weekly</changefreq><priority>1</priority></url></urlset>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>$url</loc><lastmod>$date</lastmod><priority>1</priority><changefreq>weekly</changefreq></url></urlset>
 EOD;
     $this->assertEqual($content, $sample);
   }
